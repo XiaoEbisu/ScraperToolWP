@@ -3,6 +3,32 @@ const fs = require("fs");
 const download = require("image-downloader");
 const Constants = require("./cst");
 
+const createDir = (dirName) => {
+  fs.mkdir(dirName, (err) => {
+    if (err) {
+      throw err;
+    }
+    console.log(" is creating ...\n");
+  });
+};
+
+const createFile = (directory, nameFile, content) => {
+  let isNewFile = !fs.existsSync(directory + nameFile);
+
+  fs.appendFile(directory + nameFile, content, function (err) {
+    if (err) throw err;
+    if (isNewFile) {
+      console.log("\x1b[34m", nameFile + " has been created!");
+    } else {
+      console.log("\x1b[32m", nameFile + " has been updated!");
+    }
+  });
+};
+
+/*---------------------------------------------------*/
+/*------------------ MAIN FUNCTION ------------------*/
+/*---------------------------------------------------*/
+
 (async () => {
   //Open browser
   const browser = await puppeteer.launch({ headless: true });
@@ -22,21 +48,11 @@ const Constants = require("./cst");
     let imgLink = imgElement.getAttribute("src");
     return imgLink;
   }, Constants);
-  console.log(imgLink);
 
-  // directory path
+  //Directory path
   const dir = "./" + NameBook + "/";
 
-  let createDir = (dirName) => {
-    fs.mkdir(dirName, (err) => {
-      if (err) {
-        throw err;
-      }
-      console.log("New book is creating ...");
-    });
-  };
-
-  // create new directory
+  //Create new directory
   if (fs.existsSync(dir)) {
     fs.rmSync(dir, { recursive: true, force: true });
     createDir(dir);
@@ -60,11 +76,7 @@ const Constants = require("./cst");
     "<html xmlns='http://www.w3.org/1999/xhtml' xml:lang='en'><head><title>Cover</title><style type='text/css' title='override_css'>@page {padding: 0pt; margin:0pt}body { text-align: center; padding:0pt; margin: 0pt; }div { margin: 0pt; padding: 0pt; }</style></head><body class='fff_coverpage'><div><img src='" +
     name +
     "' alt='cover'/></div></body></html>";
-
-  fs.appendFile(dir + "#cover.xhtml", coverContent, function (err) {
-    if (err) throw err;
-    console.log("Cover update!");
-  });
+  createFile(dir, "#cover.xhtml", coverContent);
 
   //Crawl all chapter url
   const articles = await page.evaluate((Constants) => {
@@ -83,56 +95,28 @@ const Constants = require("./cst");
     if (!articles[i]) continue;
 
     let url = articles[i].url;
-    console.log(url);
 
-    //check if wp
+    //check if wordpress
     if (!url.includes("wordpress.com")) {
       continue;
     }
 
-    // let [res] = (await page.$x('//h1[@class="entry-title"]'));
-    // res = await res.getProperty('textContent');
-    // let name = await res.jsonValue();
-    // console.log("my res : " + name);
-    // if(!res){
-    //   continue;
-    // }
-
     //Go in ChapterUrl
     await page.goto(url);
 
-    //Type Password if needed
-    /*
-    console.log("before pw");
-    await page.$eval(
-      "input[name=post_password]",
-      (el) => (el.value = "chonve")
-    );
-    await page.$eval("input[type=submit]", (el) => el.click());
-    console.log("after password");
-    */
-
-    //Wait for navigation ready
-    //await page.waitForNavigation();
-
     //Take Chapter Number Title in Header
-    let numChap = await page.evaluate(
-      (el) => { return el.textContent; },
-      (await page.$x(Constants.NUMCHAP))[0]
-    );
+    let numChap = await page.evaluate((el) => {
+      return el.textContent;
+    }, (await page.$x(Constants.NUMCHAP))[0]);
 
     //Take Chapter Content
     let listofp = await page.$x(Constants.CONTENT);
 
     /*Make a String var to hold "Chapter Content"*/
-    let header =
-      "<?xml version='1.0' encoding='utf-8'?><html xmlns='http://www.w3.org/1999/xhtml'><head>";
-
     let content =
-      header +
-      "<title>" +
+      "<?xml version='1.0' encoding='utf-8'?><html xmlns='http://www.w3.org/1999/xhtml'><head><title>" +
       numChap +
-      "</title>" +
+      "</title><link href='stylesheet.css' rel='stylesheet' type='text/css'/>" +
       "</head><body>" +
       "<h1>" +
       numChap +
@@ -142,14 +126,8 @@ const Constants = require("./cst");
       let myp = await page.evaluate((el) => el.outerHTML, listofp[j]);
       content += myp;
     }
-
     content = content + "</body></html>";
-
-    //Create & Write into file
-    fs.appendFile(dir + i + ".xhtml", content, function (err) {
-      if (err) throw err;
-      console.log("Chapter : " + i + ".xhtml created!");
-    });
+    createFile(dir, i + ".xhtml", content);
 
     //create file Toc //(parseInt(i) + 1)
     let toc =
@@ -162,11 +140,7 @@ const Constants = require("./cst");
       "</text>\n\t</navLabel>\n\t<content src='" +
       i +
       ".xhtml'/>\n</navPoint>\n";
-
-    fs.appendFile(dir + "toc.txt", toc, function (err) {
-      if (err) throw err;
-      console.log("Toc update!");
-    });
+    createFile(dir, "toc.txt", toc);
   }
 
   //Close browser
