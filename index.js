@@ -45,8 +45,11 @@ const createFile = (directory, nameFile, content) => {
   //Find Cover book img
   const imgLink = await page.evaluate((Constants) => {
     let imgElement = document.querySelector(Constants.COVERBOOK);
-    let imgLink = imgElement.getAttribute("src");
-    return imgLink;
+    if (imgElement) {
+      let imgLink = imgElement.getAttribute("src");
+      return imgLink;
+    }
+    return null;
   }, Constants);
 
   //Directory path
@@ -62,25 +65,28 @@ const createFile = (directory, nameFile, content) => {
 
   //Download Cover book img
   let name;
-  await download
-    .image({
-      url: imgLink,
-      dest: dir,
-    })
-    .then(({ filename }) => {
-      name = filename.replace(/^.*[\\\/]/, "");
-    });
+  const img = "";
+  if (imgLink) {
+    await download
+      .image({
+        url: imgLink,
+        dest: dir + "cover.jpg",
+      })
+      .then(({ filename }) => {
+        name = filename.replace(/^.*[\\\/]/, "");
+      });
+    img = "<img src='" + name + "' alt='cover'/>";
+  }
 
   //Create file cover for Ebook
   let coverContent =
-    "<html xmlns='http://www.w3.org/1999/xhtml' xml:lang='en'><head><title>Cover</title><style type='text/css' title='override_css'>@page {padding: 0pt; margin:0pt}body { text-align: center; padding:0pt; margin: 0pt; }div { margin: 0pt; padding: 0pt; }</style></head><body class='fff_coverpage'><div><img src='" +
-    name +
-    "' alt='cover'/></div></body></html>";
+    "<html xmlns='http://www.w3.org/1999/xhtml' xml:lang='en'><head><title>Cover</title><style type='text/css' title='override_css'>@page {padding: 0pt; margin:0pt}body { text-align: center; padding:0pt; margin: 0pt; }div { margin: 0pt; padding: 0pt; }</style></head><body class='fff_coverpage'><div>" +
+    img +
+    "</div></body></html>";
   createFile(dir, "#cover.xhtml", coverContent);
 
   //Crawl all chapter url
   const articles = await page.evaluate((Constants) => {
-    //let titleLinks = document.querySelectorAll("figure.wp-block-table td > a");
     let titleLinks = document.querySelectorAll(Constants.CHAPTERURL);
     titleLinks = [...titleLinks];
     let articles = titleLinks.map((link) => ({
@@ -101,15 +107,57 @@ const createFile = (directory, nameFile, content) => {
       continue;
     }
 
-    //Go in ChapterUrl
+    //Go in each ChapterUrl
+    await page.setDefaultNavigationTimeout(0);
     await page.goto(url);
+
+    //Type password if need
+    // if (page.$x(Constants.PWPATH)) {
+    //   /*type password */
+    //   /*wait page loading*/
+    //   /*continue scrapping*/
+    // } else {
+    //   /*scrapping */
+    // };
 
     //Take Chapter Number Title in Header
     let numChap = await page.evaluate((el) => {
       return el.textContent;
     }, (await page.$x(Constants.NUMCHAP))[0]);
+    console.log("Current chapter : " + numChap);
 
-    //Take Chapter Content
+    //Download img in Chapter
+    let imgChap = await page.evaluate((...img) => {
+      if (img) {
+        return img.map((e) => e.src);
+      } else return;
+    }, ...(await page.$x(Constants.IMG)));
+    console.log(imgChap);
+
+    if (imgChap.length != 0) {
+      for (let i = 0; i < imgChap.length; i++) {
+        await download.image({
+          url: imgChap[i],
+          dest:
+            dir +
+            numChap.replace(/[^\d]/g, "") +
+            "-" +
+            (parseInt(i) + 1) +
+            ".jpg",
+        });
+      }
+    }
+
+    //Title Chapter
+    let titleChap = await page.evaluate((el) => {
+      if (el) {
+        return el.textContent;
+      }
+      return "Chương " + numChap.replace(/[^\d]/g, "");
+    }, (await page.$x(Constants.TITLECHAP))[0]);
+    console.log(titleChap);
+
+    //Chapter Content
     let listofp = await page.$x(Constants.CONTENT);
 
     /*Make a String var to hold "Chapter Content"*/
@@ -119,7 +167,7 @@ const createFile = (directory, nameFile, content) => {
       "</title><link href='stylesheet.css' rel='stylesheet' type='text/css'/>" +
       "</head><body>" +
       "<h1>" +
-      numChap +
+      titleChap +
       "</h1>";
 
     for (var j = 0; j < listofp.length; j++) {
@@ -136,7 +184,7 @@ const createFile = (directory, nameFile, content) => {
       "' playOrder='" +
       i +
       "'>\n\t<navLabel>\n\t\t<text>" +
-      numChap +
+      titleChap +
       "</text>\n\t</navLabel>\n\t<content src='" +
       i +
       ".xhtml'/>\n</navPoint>\n";
